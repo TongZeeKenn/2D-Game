@@ -1,111 +1,98 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using static UnityEngine.GraphicsBuffer;
+
 
 public class PlayerMovement : MonoBehaviour
 {
-    public float moveSpeed;
-    private Vector2 moveInput;
+    private float horizontal;
+    public float speed = 8f;
+    public float jumpingPower = 16f;
+    private bool isFacingRight = true;
 
-    private float activeMoveSpeed;
-    public float dashSpeed;
+    private bool isJumping;
 
-    public float dashLength = 0.5f, dashCooldown = 1f;
+    private float coyoteTime = 0.2f;
+    private float coyoteTimeCounter;
 
-    private float dashCounter;
-    private float dashCoolCounter;
+    private float jumpBufferTime = 0.2f;
+    private float jumpBufferCounter;
 
+    [SerializeField] private Rigidbody2D rb;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private LayerMask groundLayer;
 
-    Rigidbody2D rb; 
-    Vector2 clickPos;
-    Vector2 targetPos;
-    Vector2 playerPos;
-
-
-
-    public GameObject aimAssistPlaceHolder;
-    public GameObject aimAssist;
-    public GameObject slashEffect;
-
-    //public Animator animator;
-
-
-    void Start()
-    {
-        rb = GetComponent<Rigidbody2D>();
-        activeMoveSpeed = moveSpeed;
-        
-    }
-    
     void Update()
     {
-        //move
-        moveInput.x = Input.GetAxis("Horizontal");
-        moveInput.y = Input.GetAxis("Vertical");
+        horizontal = Input.GetAxisRaw("Horizontal");
 
-        moveInput.Normalize();
-
-        rb.velocity = moveInput * activeMoveSpeed;
-
-
-        //oppsite dir code
-
-        Vector2 positionOnScreen = Camera.main.WorldToViewportPoint(transform.position);
-        Vector2 mouseOnScreen = (Vector2)Camera.main.ScreenToViewportPoint(Input.mousePosition);
-        float angle = AngleBetweenTwoPoints(positionOnScreen, mouseOnScreen);
-        aimAssistPlaceHolder.gameObject.transform.rotation = Quaternion.Euler(new Vector3(0f, 0f, angle + 90f));
-
-        if (Input.GetMouseButtonDown(0))
+        if (IsGrounded())
         {
-            
-            clickPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            playerPos = transform.position;
-
-            targetPos = (playerPos - clickPos).normalized * 10+ playerPos;
-            
-            Instantiate(slashEffect, aimAssist.transform.position, Quaternion.Euler(new Vector3(0f, 0f, angle)));
-
+            coyoteTimeCounter = coyoteTime;
         }
-        //transform.position = Vector3.Lerp(transform.position, targetPos, 0.1f);
-
-
-
-        //dash
-        if (Input.GetKeyDown(KeyCode.Space))
+        else
         {
-            if(dashCoolCounter <= 0 && dashCounter <= 0)
-            {
-                activeMoveSpeed = dashSpeed;
-                dashCounter = dashLength;
-            }
-
-            
+            coyoteTimeCounter -= Time.deltaTime;
         }
 
-
-        if (dashCounter > 0)
+        if (Input.GetButtonDown("Jump"))
         {
-            dashCounter -= Time.deltaTime;
-
-            if (dashCounter <= 0)
-            {
-                activeMoveSpeed = moveSpeed;
-                dashCoolCounter = dashCooldown;
-            }
+            jumpBufferCounter = jumpBufferTime;
+        }
+        else
+        {
+            jumpBufferCounter -= Time.deltaTime;
         }
 
-        if(dashCoolCounter > 0)
+        if (coyoteTimeCounter > 0f && jumpBufferCounter > 0f && !isJumping)
         {
-            dashCoolCounter -= Time.deltaTime;
+            rb.velocity = new Vector2(rb.velocity.x, jumpingPower);
+
+            jumpBufferCounter = 0f;
+
+            StartCoroutine(JumpCooldown());
         }
 
+        if (Input.GetButtonUp("Jump") && rb.velocity.y > 0f)
+        {
+            rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * 0.5f);
 
+            coyoteTimeCounter = 0f;
+        }
 
-
-
+        Flip();
     }
 
+    private void FixedUpdate()
+    {
+        rb.velocity = new Vector2(horizontal * speed, rb.velocity.y);
+    }
+
+    private bool IsGrounded()
+    {
+        return Physics2D.OverlapCircle(groundCheck.position, 0.2f, groundLayer);
+    }
+
+    private void Flip()
+    {
+        if (isFacingRight && horizontal < 0f || !isFacingRight && horizontal > 0f)
+        {
+            isFacingRight = !isFacingRight;
+            Vector3 localScale = transform.localScale;
+            localScale.x *= -1f;
+            transform.localScale = localScale;
+        }
+    }
+
+    private IEnumerator JumpCooldown()
+    {
+        isJumping = true;
+        yield return new WaitForSeconds(0.4f);
+        isJumping = false;
+    }
+
+
+    //useless
     float AngleBetweenTwoPoints(Vector3 a, Vector3 b)
     {
         return Mathf.Atan2(a.y - b.y, a.x - b.x) * Mathf.Rad2Deg;
